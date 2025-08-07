@@ -7,6 +7,10 @@ import smtplib
 from email.mime.multipart import MIMEMultipart  
 from email.mime.text import MIMEText
 from typing import Optional
+from dotenv import load_dotenv
+from icloud_calendar import get_upcoming_events
+
+load_dotenv()  # 🔁 Ajout ici avant les autres imports nécessitant des variables d’env
 
 @function_tool()
 async def get_weather(
@@ -16,8 +20,7 @@ async def get_weather(
     Get the current weather for a given city.
     """
     try:
-        response = requests.get(
-            f"https://wttr.in/{city}?format=3")
+        response = requests.get(f"https://wttr.in/{city}?format=3")
         if response.status_code == 200:
             logging.info(f"Weather for {city}: {response.text.strip()}")
             return response.text.strip()   
@@ -53,51 +56,36 @@ async def send_email(
 ) -> str:
     """
     Send an email through Gmail.
-    
-    Args:
-        to_email: Recipient email address
-        subject: Email subject line
-        message: Email body content
-        cc_email: Optional CC email address
     """
     try:
-        # Gmail SMTP configuration
         smtp_server = "smtp.gmail.com"
         smtp_port = 587
-        
-        # Get credentials from environment variables
+
         gmail_user = os.getenv("GMAIL_USER")
-        gmail_password = os.getenv("GMAIL_APP_PASSWORD")  # Use App Password, not regular password
+        gmail_password = os.getenv("GMAIL_APP_PASSWORD")
         
         if not gmail_user or not gmail_password:
             logging.error("Gmail credentials not found in environment variables")
             return "Email sending failed: Gmail credentials not configured."
         
-        # Create message
         msg = MIMEMultipart()
         msg['From'] = gmail_user
         msg['To'] = to_email
         msg['Subject'] = subject
-        
-        # Add CC if provided
+
         recipients = [to_email]
         if cc_email:
             msg['Cc'] = cc_email
             recipients.append(cc_email)
-        
-        # Attach message body
+
         msg.attach(MIMEText(message, 'plain'))
-        
-        # Connect to Gmail SMTP server
+
         server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()  # Enable TLS encryption
+        server.starttls()
         server.login(gmail_user, gmail_password)
-        
-        # Send email
-        text = msg.as_string()
-        server.sendmail(gmail_user, recipients, text)
+        server.sendmail(gmail_user, recipients, msg.as_string())
         server.quit()
-        
+
         logging.info(f"Email sent successfully to {to_email}")
         return f"Email sent successfully to {to_email}"
         
@@ -110,3 +98,21 @@ async def send_email(
     except Exception as e:
         logging.error(f"Error sending email: {e}")
         return f"An error occurred while sending email: {str(e)}"
+
+
+# ✅ Fonction calendrier iCloud
+from icloud_calendar import get_upcoming_events
+
+@function_tool()
+async def get_calendar(
+    context: RunContext,  # type: ignore
+    calendar_name: Optional[str] = "Famille",
+    days: Optional[int] = 7
+) -> str:
+    """
+    Affiche les événements à venir depuis iCloud Calendar.
+    """
+    events = get_upcoming_events(days=7, calendar_name="Famille")
+    if not events or "❌" in events[0] or "📭" in events[0]:
+        return f"Erreur : {events[0]}"
+    return "Voici vos prochains événements :\\n" + "\\n".join(events[:5])
